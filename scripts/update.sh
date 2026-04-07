@@ -14,26 +14,28 @@ fi
 # Loại bỏ chữ 'v' ở đầu (ví dụ v1.86.0 -> 1.86.0)
 LATEST_VERSION=${LATEST_TAG#v}
 
-# Nhận diện Hệ điều hành
+# Nhận diện Hệ điều hành và Kiến trúc
 OS_RAW=$(uname -s | tr '[:upper:]' '[:lower:]')
+
 if [ "$OS_RAW" == "darwin" ]; then
     OS_NAME="macos"
     EXT="zip"
     DATA_FOLDER="code-portable-data"
+    ARCH="universal" # Ép luôn dùng bản universal cho macOS
 else
     OS_NAME="linux"
     EXT="tar.gz"
     DATA_FOLDER="data"
-fi
-
-# Nhận diện Kiến trúc
-ARCH_RAW=$(uname -m)
-if [[ "$ARCH_RAW" == "aarch64" || "$ARCH_RAW" == "arm64" ]]; then
-    ARCH="arm64"
-elif [[ "$ARCH_RAW" == "armv7l" || "$ARCH_RAW" == "armhf" ]]; then
-    ARCH="armhf"
-else
-    ARCH="x64"
+    
+    # Chỉ check kiến trúc nếu là Linux
+    ARCH_RAW=$(uname -m)
+    if [[ "$ARCH_RAW" == "aarch64" || "$ARCH_RAW" == "arm64" ]]; then
+        ARCH="arm64"
+    elif [[ "$ARCH_RAW" == "armv7l" || "$ARCH_RAW" == "armhf" ]]; then
+        ARCH="armhf"
+    else
+        ARCH="x64"
+    fi
 fi
 
 FILE_NAME="VSCode-Portable-${OS_NAME}-${ARCH}-${LATEST_VERSION}.${EXT}"
