@@ -21,13 +21,13 @@ jobs:
       - name: Check for updates
         id: check
         run: |
-          # Lấy version mới nhất từ API của Microsoft (dùng bản win32-x64 làm mốc)
-          LATEST_VERSION=$(curl -sL "https://update.code.visualstudio.com/api/update/win32-x64-archive/stable" | jq -r .productVersion)
+          # Dùng API releases để lấy mảng version, [0] là bản mới nhất
+          LATEST_VERSION=$(curl -sL "https://update.code.visualstudio.com/api/releases/stable" | jq -r '.[0]')
           CURRENT_VERSION=$(cat version.txt || echo "0.0.0")
           
           echo "Latest: $LATEST_VERSION, Current: $CURRENT_VERSION"
           
-          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ] && [ "$LATEST_VERSION" != "null" ]; then
+          if [ -n "$LATEST_VERSION" ] && [ "$LATEST_VERSION" != "null" ] && [ "$LATEST_VERSION" != "$CURRENT_VERSION" ]; then
             echo "should_run=true" >> $GITHUB_OUTPUT
             echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
             
