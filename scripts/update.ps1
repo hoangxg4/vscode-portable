@@ -1,11 +1,14 @@
-# Yêu cầu chạy dưới quyền Administrator nếu để ở thư mục C:\
 $ErrorActionPreference = "Stop"
 
 Write-Host "Đang kiểm tra phiên bản VS Code mới nhất..." -ForegroundColor Cyan
-$apiUrl = "https://update.code.visualstudio.com/api/update/win32-x64-archive/stable"
-$latestData = Invoke-RestMethod -Uri $apiUrl
-$latestVersion = $latestData.productVersion
-$downloadUrl = $latestData.url
+
+# Sử dụng API releases mới
+$apiUrl = "https://update.code.visualstudio.com/api/releases/stable"
+$versions = Invoke-RestMethod -Uri $apiUrl
+$latestVersion = $versions[0]
+
+# URL tải xuống tĩnh dựa trên OS (sẽ tự động redirect tới bản mới nhất)
+$downloadUrl = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-archive"
 
 Write-Host "Phiên bản mới nhất là: $latestVersion" -ForegroundColor Green
 $choice = Read-Host "Bạn có muốn cập nhật không? (Y/N)"
@@ -36,13 +39,9 @@ if ($choice -match "^[yY]$") {
     }
 
     Write-Host "Đang ghi đè bản mới..." -ForegroundColor Cyan
-    # Xóa các file cũ (ngoại trừ thư mục data và chính file update.ps1 này)
     Get-ChildItem -Path $currentDir | Where-Object { $_.Name -ne "data" -and $_.Name -ne "update.ps1" } | Remove-Item -Recurse -Force
-    
-    # Copy file mới sang
     Get-ChildItem -Path $tempExtract | Copy-Item -Destination $currentDir -Recurse -Force
 
-    # Dọn dẹp
     Remove-Item $tempZip
     Remove-Item -Recurse -Force $tempExtract
 
