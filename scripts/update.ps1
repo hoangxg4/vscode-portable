@@ -1,16 +1,21 @@
 $ErrorActionPreference = "Stop"
 
-Write-Host "Đang kiểm tra phiên bản VS Code mới nhất..." -ForegroundColor Cyan
+Write-Host "Đang kiểm tra phiên bản mới nhất từ repo hoangxg4/vscode-portable..." -ForegroundColor Cyan
 
-# Sử dụng API releases mới
-$apiUrl = "https://update.code.visualstudio.com/api/releases/stable"
-$versions = Invoke-RestMethod -Uri $apiUrl
-$latestVersion = $versions[0]
+# Gọi GitHub API để lấy release mới nhất
+$apiUrl = "https://api.github.com/repos/hoangxg4/vscode-portable/releases/latest"
+$releaseInfo = Invoke-RestMethod -Uri $apiUrl -ErrorAction Stop
+$latestTag = $releaseInfo.tag_name
+$latestVersion = $latestTag -replace "^v", ""
 
-# URL tải xuống tĩnh dựa trên OS (sẽ tự động redirect tới bản mới nhất)
-$downloadUrl = "https://code.visualstudio.com/sha/download?build=stable&os=win32-x64-archive"
+# Nhận diện kiến trúc CPU (x64 hoặc arm64)
+$arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM") { "arm64" } else { "x64" }
 
-Write-Host "Phiên bản mới nhất là: $latestVersion" -ForegroundColor Green
+# Tạo link tải file dựa trên tên file sinh ra từ GitHub Actions
+$fileName = "VSCode-Portable-windows-$arch-$latestVersion.zip"
+$downloadUrl = "https://github.com/hoangxg4/vscode-portable/releases/download/$latestTag/$fileName"
+
+Write-Host "Phiên bản mới nhất trên GitHub là: $latestVersion" -ForegroundColor Green
 $choice = Read-Host "Bạn có muốn cập nhật không? (Y/N)"
 
 if ($choice -match "^[yY]$") {
@@ -22,10 +27,10 @@ if ($choice -match "^[yY]$") {
     }
 
     $currentDir = Get-Location
-    $tempZip = "$env:TEMP\vscode-update.zip"
+    $tempZip = "$env:TEMP\$fileName"
     $tempExtract = "$env:TEMP\vscode-extracted"
 
-    Write-Host "Đang tải VS Code v$latestVersion..." -ForegroundColor Cyan
+    Write-Host "Đang tải $fileName..." -ForegroundColor Cyan
     Invoke-WebRequest -Uri $downloadUrl -OutFile $tempZip
 
     Write-Host "Đang giải nén..." -ForegroundColor Cyan
@@ -39,9 +44,11 @@ if ($choice -match "^[yY]$") {
     }
 
     Write-Host "Đang ghi đè bản mới..." -ForegroundColor Cyan
+    # Giữ lại thư mục data hiện tại để an toàn, xóa các file còn lại
     Get-ChildItem -Path $currentDir | Where-Object { $_.Name -ne "data" -and $_.Name -ne "update.ps1" } | Remove-Item -Recurse -Force
     Get-ChildItem -Path $tempExtract | Copy-Item -Destination $currentDir -Recurse -Force
 
+    # Dọn dẹp
     Remove-Item $tempZip
     Remove-Item -Recurse -Force $tempExtract
 
