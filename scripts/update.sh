@@ -1,22 +1,22 @@
 #!/bin/bash
 
-# Xác định OS (Linux hay macOS)
 OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
-ARCH_NAME=$(uname -m)
 
 if [ "$OS_NAME" == "darwin" ]; then
-    API_URL="https://update.code.visualstudio.com/api/update/darwin/stable"
     DATA_FOLDER="code-portable-data"
     EXT="zip"
+    DOWNLOAD_OS="darwin"
 else
-    API_URL="https://update.code.visualstudio.com/api/update/linux-x64/stable"
     DATA_FOLDER="data"
     EXT="tar.gz"
+    DOWNLOAD_OS="linux-x64" # Hoặc arm64 tùy nền tảng chạy script
 fi
 
 echo -e "\033[0;36mĐang kiểm tra phiên bản VS Code mới nhất...\033[0m"
-LATEST_VERSION=$(curl -sL $API_URL | grep -o '"productVersion":"[^"]*' | cut -d'"' -f4)
-DOWNLOAD_URL=$(curl -sL $API_URL | grep -o '"url":"[^"]*' | cut -d'"' -f4)
+
+# Lấy version từ API releases (không dùng jq để tránh lỗi nếu máy user không cài)
+LATEST_VERSION=$(curl -sL "https://update.code.visualstudio.com/api/releases/stable" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
+DOWNLOAD_URL="https://code.visualstudio.com/sha/download?build=stable&os=$DOWNLOAD_OS"
 
 if [ -z "$LATEST_VERSION" ]; then
     echo "Không thể kiểm tra phiên bản. Thoát..."
@@ -54,12 +54,10 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
     fi
 
     echo -e "\033[0;36mĐang ghi đè bản mới...\033[0m"
-    # Dành cho Linux (Xóa hết trừ data và script)
     if [ "$OS_NAME" != "darwin" ]; then
         find "$CURRENT_DIR" -mindepth 1 -maxdepth 1 ! -name "$DATA_FOLDER" ! -name "update.sh" -exec rm -rf {} +
         cp -R "$TEMP_DIR/extracted/"* "$CURRENT_DIR/"
     else
-        # Dành cho macOS (Thay thế thư mục .app)
         rm -rf "$CURRENT_DIR/Visual Studio Code.app"
         cp -R "$TEMP_DIR/extracted/Visual Studio Code.app" "$CURRENT_DIR/"
     fi
