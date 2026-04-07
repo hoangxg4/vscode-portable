@@ -1,0 +1,145 @@
+name: Auto Build VS Code Portable
+
+on:
+  schedule:
+    - cron: '0 0 * * *' # Chạy vào nửa đêm (UTC) mỗi ngày
+  workflow_dispatch: # Cho phép bấm chạy thủ công
+
+permissions:
+  contents: write
+
+jobs:
+  check-version:
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.check.outputs.should_run }}
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Check for updates
+        id: check
+        run: |
+          # Lấy version mới nhất từ API của Microsoft (dùng bản win32-x64 làm mốc)
+          LATEST_VERSION=$(curl -sL "https://update.code.visualstudio.com/api/update/win32-x64-archive/stable" | jq -r .productVersion)
+          CURRENT_VERSION=$(cat version.txt || echo "0.0.0")
+          
+          echo "Latest: $LATEST_VERSION, Current: $CURRENT_VERSION"
+          
+          if [ "$LATEST_VERSION" != "$CURRENT_VERSION" ] && [ "$LATEST_VERSION" != "null" ]; then
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+            
+            # Lưu version mới
+            echo $LATEST_VERSION > version.txt
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add version.txt
+            git commit -m "Update VS Code version to $LATEST_VERSION"
+            git push
+          else
+            echo "should_run=false" >> $GITHUB_OUTPUT
+          fi
+
+  build-and-release:
+    needs: check-version
+    if: needs.check-version.outputs.should_run == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          # Windows
+          - os_name: windows
+            arch: x64
+            url_os: win32-x64-archive
+            ext: zip
+          - os_name: windows
+            arch: arm64
+            url_os: win32-arm64-archive
+            ext: zip
+          # Linux
+          - os_name: linux
+            arch: x64
+            url_os: linux-x64
+            ext: tar.gz
+          - os_name: linux
+            arch: armhf
+            url_os: linux-armhf
+            ext: tar.gz
+          - os_name: linux
+            arch: arm64
+            url_os: linux-arm64
+            ext: tar.gz
+          # macOS
+          - os_name: macos
+            arch: x64
+            url_os: darwin
+            ext: zip
+          - os_name: macos
+            arch: arm64
+            url_os: darwin-arm64
+            ext: zip
+
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v4
+
+      - name: Download VS Code
+        run: |
+          DOWNLOAD_URL="https://code.visualstudio.com/sha/download?build=stable&os=${{ matrix.url_os }}"
+          curl -sL $DOWNLOAD_URL -o vscode.${{ matrix.ext }}
+
+      - name: Create Portable Structure
+        run: |
+          mkdir -p package/vscode
+          
+          if [ "${{ matrix.ext }}" == "zip" ]; then
+            unzip -q vscode.zip -d package/vscode
+          else
+            tar -xzf vscode.tar.gz -C package/vscode --strip-components=1
+          fi
+
+          # Xử lý theo Hệ điều hành để tạo thư mục lưu trữ & script
+          if [ "${{ matrix.os_name }}" == "windows" ]; then
+            mkdir -p package/vscode/data
+            mkdir -p package/vscode/data/tmp
+            cp scripts/update.ps1 package/vscode/update.ps1
+          elif [ "${{ matrix.os_name }}" == "linux" ]; then
+            mkdir -p package/vscode/data
+            mkdir -p package/vscode/data/tmp
+            cp scripts/update.sh package/vscode/update.sh
+            chmod +x package/vscode/update.sh
+          elif [ "${{ matrix.os_name }}" == "macos" ]; then
+            # macOS cần thư mục code-portable-data nằm ngang hàng với file .app
+            mv package/vscode/Visual\ Studio\ Code.app package/
+            mkdir -p package/code-portable-data
+            mkdir -p package/code-portable-data/tmp
+            cp scripts/update.sh package/update.sh
+            chmod +x package/update.sh
+            rm -rf package/vscode # Xóa thư mục tạm vì đã dời .app ra ngoài
+          fi
+
+      - name: Repackage
+        id: repackage
+        run: |
+          VERSION=${{ needs.check-version.outputs.version }}
+          ARCHIVE_NAME="VSCode-Portable-${{ matrix.os_name }}-${{ matrix.arch }}-$VERSION"
+          
+          cd package
+          if [ "${{ matrix.os_name }}" == "linux" ]; then
+            tar -czf ../${ARCHIVE_NAME}.tar.gz *
+            echo "file=${ARCHIVE_NAME}.tar.gz" >> $GITHUB_OUTPUT
+          else
+            zip -qr ../${ARCHIVE_NAME}.zip *
+            echo "file=${ARCHIVE_NAME}.zip" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.check-version.outputs.version }}
+          name: VS Code Portable v${{ needs.check-version.outputs.version }}
+          files: ${{ steps.repackage.outputs.file }}
+          draft: false
+          prerelease: false
