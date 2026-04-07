@@ -1,29 +1,45 @@
 #!/bin/bash
 
-OS_NAME=$(uname -s | tr '[:upper:]' '[:lower:]')
+echo -e "\033[0;36mĐang kiểm tra phiên bản mới nhất từ repo hoangxg4/vscode-portable...\033[0m"
 
-if [ "$OS_NAME" == "darwin" ]; then
-    DATA_FOLDER="code-portable-data"
-    EXT="zip"
-    DOWNLOAD_OS="darwin"
-else
-    DATA_FOLDER="data"
-    EXT="tar.gz"
-    DOWNLOAD_OS="linux-x64" # Hoặc arm64 tùy nền tảng chạy script
-fi
+# Lấy tag release mới nhất từ GitHub API
+API_URL="https://api.github.com/repos/hoangxg4/vscode-portable/releases/latest"
+LATEST_TAG=$(curl -sL $API_URL | grep '"tag_name":' | head -n 1 | awk -F '"' '{print $4}')
 
-echo -e "\033[0;36mĐang kiểm tra phiên bản VS Code mới nhất...\033[0m"
-
-# Lấy version từ API releases (không dùng jq để tránh lỗi nếu máy user không cài)
-LATEST_VERSION=$(curl -sL "https://update.code.visualstudio.com/api/releases/stable" | grep -o '"[^"]*"' | head -n 1 | tr -d '"')
-DOWNLOAD_URL="https://code.visualstudio.com/sha/download?build=stable&os=$DOWNLOAD_OS"
-
-if [ -z "$LATEST_VERSION" ]; then
-    echo "Không thể kiểm tra phiên bản. Thoát..."
+if [ -z "$LATEST_TAG" ]; then
+    echo -e "\033[0;31mKhông thể lấy thông tin phiên bản từ GitHub. Thoát...\033[0m"
     exit 1
 fi
 
-echo -e "\033[0;32mPhiên bản mới nhất là: $LATEST_VERSION\033[0m"
+# Loại bỏ chữ 'v' ở đầu (ví dụ v1.86.0 -> 1.86.0)
+LATEST_VERSION=${LATEST_TAG#v}
+
+# Nhận diện Hệ điều hành
+OS_RAW=$(uname -s | tr '[:upper:]' '[:lower:]')
+if [ "$OS_RAW" == "darwin" ]; then
+    OS_NAME="macos"
+    EXT="zip"
+    DATA_FOLDER="code-portable-data"
+else
+    OS_NAME="linux"
+    EXT="tar.gz"
+    DATA_FOLDER="data"
+fi
+
+# Nhận diện Kiến trúc
+ARCH_RAW=$(uname -m)
+if [[ "$ARCH_RAW" == "aarch64" || "$ARCH_RAW" == "arm64" ]]; then
+    ARCH="arm64"
+elif [[ "$ARCH_RAW" == "armv7l" || "$ARCH_RAW" == "armhf" ]]; then
+    ARCH="armhf"
+else
+    ARCH="x64"
+fi
+
+FILE_NAME="VSCode-Portable-${OS_NAME}-${ARCH}-${LATEST_VERSION}.${EXT}"
+DOWNLOAD_URL="https://github.com/hoangxg4/vscode-portable/releases/download/${LATEST_TAG}/${FILE_NAME}"
+
+echo -e "\033[0;32mPhiên bản mới nhất trên GitHub là: $LATEST_VERSION\033[0m"
 read -p "Bạn có muốn cập nhật không? (Y/n): " choice
 choice=${choice:-Y}
 
@@ -35,26 +51,26 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
 
     CURRENT_DIR=$(pwd)
     TEMP_DIR=$(mktemp -d)
-    ARCHIVE_FILE="$TEMP_DIR/vscode.$EXT"
+    ARCHIVE_FILE="$TEMP_DIR/$FILE_NAME"
 
-    echo -e "\033[0;36mĐang tải VS Code v$LATEST_VERSION...\033[0m"
-    curl -# -L $DOWNLOAD_URL -o "$ARCHIVE_FILE"
+    echo -e "\033[0;36mĐang tải $FILE_NAME...\033[0m"
+    curl -# -L "$DOWNLOAD_URL" -o "$ARCHIVE_FILE"
 
     echo -e "\033[0;36mĐang giải nén...\033[0m"
     mkdir -p "$TEMP_DIR/extracted"
     if [ "$EXT" == "zip" ]; then
         unzip -q "$ARCHIVE_FILE" -d "$TEMP_DIR/extracted"
     else
-        tar -xzf "$ARCHIVE_FILE" -C "$TEMP_DIR/extracted" --strip-components=1
+        tar -xzf "$ARCHIVE_FILE" -C "$TEMP_DIR/extracted"
     fi
 
-    echo -e "\033[0;36mĐang sao lưu dữ liệu...\033[0m"
+    echo -e "\033[0;36mĐang sao lưu dữ liệu ($DATA_FOLDER)...\033[0m"
     if [ -d "$CURRENT_DIR/$DATA_FOLDER" ]; then
         cp -R "$CURRENT_DIR/$DATA_FOLDER" "$TEMP_DIR/extracted/"
     fi
 
     echo -e "\033[0;36mĐang ghi đè bản mới...\033[0m"
-    if [ "$OS_NAME" != "darwin" ]; then
+    if [ "$OS_NAME" != "macos" ]; then
         find "$CURRENT_DIR" -mindepth 1 -maxdepth 1 ! -name "$DATA_FOLDER" ! -name "update.sh" -exec rm -rf {} +
         cp -R "$TEMP_DIR/extracted/"* "$CURRENT_DIR/"
     else
