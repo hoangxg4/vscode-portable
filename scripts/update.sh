@@ -1,33 +1,21 @@
 #!/bin/bash
 
-echo -e "\033[0;36mĐang kiểm tra phiên bản mới nhất từ repo hoangxg4/vscode-portable...\033[0m"
+echo -e "\033[0;36mĐang kiểm tra phiên bản VS Code...\033[0m"
 
-# Lấy tag release mới nhất từ GitHub API
-API_URL="https://api.github.com/repos/hoangxg4/vscode-portable/releases/latest"
-LATEST_TAG=$(curl -sL $API_URL | grep '"tag_name":' | head -n 1 | awk -F '"' '{print $4}')
-
-if [ -z "$LATEST_TAG" ]; then
-    echo -e "\033[0;31mKhông thể lấy thông tin phiên bản từ GitHub. Thoát...\033[0m"
-    exit 1
-fi
-
-# Loại bỏ chữ 'v' ở đầu (ví dụ v1.86.0 -> 1.86.0)
-LATEST_VERSION=${LATEST_TAG#v}
-
-# Nhận diện Hệ điều hành và Kiến trúc
+# Nhận diện Hệ điều hành & Kiến trúc
 OS_RAW=$(uname -s | tr '[:upper:]' '[:lower:]')
-
 if [ "$OS_RAW" == "darwin" ]; then
     OS_NAME="macos"
     EXT="zip"
     DATA_FOLDER="code-portable-data"
-    ARCH="universal" # Ép luôn dùng bản universal cho macOS
+    ARCH="universal"
+    PACKAGE_JSON="./Visual Studio Code.app/Contents/Resources/app/package.json"
 else
     OS_NAME="linux"
     EXT="tar.gz"
     DATA_FOLDER="data"
+    PACKAGE_JSON="./resources/app/package.json"
     
-    # Chỉ check kiến trúc nếu là Linux
     ARCH_RAW=$(uname -m)
     if [[ "$ARCH_RAW" == "aarch64" || "$ARCH_RAW" == "arm64" ]]; then
         ARCH="arm64"
@@ -38,11 +26,34 @@ else
     fi
 fi
 
+# 1. Đọc phiên bản hiện tại từ lõi VS Code
+CURRENT_VERSION="Không xác định"
+if [ -f "$PACKAGE_JSON" ]; then
+    CURRENT_VERSION=$(grep -m 1 '"version":' "$PACKAGE_JSON" | awk -F '"' '{print $4}')
+fi
+
+echo -e "\033[0;33mPhiên bản hiện tại: $CURRENT_VERSION\033[0m"
+
+# 2. Lấy phiên bản mới nhất từ GitHub Release
+API_URL="https://api.github.com/repos/hoangxg4/vscode-portable/releases/latest"
+LATEST_TAG=$(curl -sL $API_URL | grep '"tag_name":' | head -n 1 | awk -F '"' '{print $4}')
+
+if [ -z "$LATEST_TAG" ]; then
+    echo -e "\033[0;31mKhông thể lấy thông tin phiên bản từ GitHub. Thoát...\033[0m"
+    exit 1
+fi
+
+LATEST_VERSION=${LATEST_TAG#v}
 FILE_NAME="VSCode-Portable-${OS_NAME}-${ARCH}-${LATEST_VERSION}.${EXT}"
 DOWNLOAD_URL="https://github.com/hoangxg4/vscode-portable/releases/download/${LATEST_TAG}/${FILE_NAME}"
 
-echo -e "\033[0;32mPhiên bản mới nhất trên GitHub là: $LATEST_VERSION\033[0m"
-read -p "Bạn có muốn cập nhật không? (Y/n): " choice
+echo -e "\033[0;32mPhiên bản mới nhất: $LATEST_VERSION\033[0m"
+
+if [ "$CURRENT_VERSION" == "$LATEST_VERSION" ]; then
+    echo -e "\033[0;36m=> Bạn đang sử dụng phiên bản mới nhất!\033[0m"
+fi
+
+read -p "Bạn có muốn tiếp tục cập nhật / cài lại không? (Y/n): " choice
 choice=${choice:-Y}
 
 if [[ "$choice" =~ ^[Yy]$ ]]; then
@@ -81,7 +92,7 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
     fi
 
     rm -rf "$TEMP_DIR"
-    echo -e "\033[0;32mCập nhật thành công lên $LATEST_VERSION!\033[0m"
+    echo -e "\033[0;32mHoàn tất!\033[0m"
 else
     echo "Đã hủy cập nhật."
 fi
