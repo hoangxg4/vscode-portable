@@ -71,14 +71,10 @@ jobs:
             arch: arm64
             url_os: linux-arm64
             ext: tar.gz
-          # macOS
+          # macOS (Dùng bản Universal chung cho cả Intel và ARM64)
           - os_name: macos
-            arch: x64
-            url_os: darwin
-            ext: zip
-          - os_name: macos
-            arch: arm64
-            url_os: darwin-arm64
+            arch: universal
+            url_os: darwin-universal
             ext: zip
 
     steps:
@@ -87,8 +83,12 @@ jobs:
 
       - name: Download VS Code
         run: |
-          DOWNLOAD_URL="https://code.visualstudio.com/sha/download?build=stable&os=${{ matrix.url_os }}"
-          curl -sL $DOWNLOAD_URL -o vscode.${{ matrix.ext }}
+          # Sử dụng API update chính thức và ổn định nhất của Microsoft
+          DOWNLOAD_URL="https://update.code.visualstudio.com/latest/${{ matrix.url_os }}/stable"
+          echo "Downloading from: $DOWNLOAD_URL"
+          
+          # Dùng curl -sLf (thêm cờ -f) để nếu bị lỗi 404, script sẽ DỪNG NGAY tại đây
+          curl -sLf "$DOWNLOAD_URL" -o vscode.${{ matrix.ext }}
 
       - name: Create Portable Structure
         run: |
