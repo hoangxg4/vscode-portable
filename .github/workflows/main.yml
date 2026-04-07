@@ -117,7 +117,7 @@ jobs:
           if [ "${{ matrix.os_name }}" == "windows" ]; then
             mkdir -p package/vscode/data
             mkdir -p package/vscode/data/tmp
-            cp scripts/update.ps1 package/vscode/update.cmd
+            cp scripts/update.cmd package/vscode/update.cmd
           elif [ "${{ matrix.os_name }}" == "linux" ]; then
             mkdir -p package/vscode/data
             mkdir -p package/vscode/data/tmp
