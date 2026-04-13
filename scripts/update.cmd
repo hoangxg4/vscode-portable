@@ -9,65 +9,46 @@ exit /b %errorlevel%
 $ErrorActionPreference = "Stop"
 Write-Host "--- TRINH CAP NHAT VS CODE PORTABLE ---" -ForegroundColor Cyan
 
-# 1. Tim file thuc thi cua VS Code (Code.exe hoac bin\code.cmd)
+# 1. Tim file thuc thi de xac dinh thu muc goc
 $currentDir = Get-Location
 $exePaths = @(".\bin\code.cmd", "..\bin\code.cmd", ".\Code.exe", "..\Code.exe")
 $validExe = $null
 
 foreach ($p in $exePaths) {
-    if (Test-Path $p) {
-        $validExe = $p
-        break
-    }
+    if (Test-Path $p) { $validExe = $p; break }
 }
 
 $currentVersion = "Khong xac dinh"
 if ($validExe) {
     try {
-        # Goi truc tiep lenh code --version va lay dong dau tien
         $versionOutput = & $validExe --version
         $currentVersion = $versionOutput[0].Trim()
-        
-        # Dat lai thu muc goc cho chuan xac
         $fullPath = Resolve-Path $validExe
-        if ($fullPath -match "bin\\code.cmd$") {
-            $currentDir = Split-Path (Split-Path $fullPath)
-        } else {
-            $currentDir = Split-Path $fullPath
-        }
-    } catch {
-        Write-Host "Khong the lay phien ban tu file thuc thi!" -ForegroundColor Red
-    }
+        $currentDir = if ($fullPath -match "bin\\code.cmd$") { Split-Path (Split-Path $fullPath) } else { Split-Path $fullPath }
+    } catch { }
 }
 
 Write-Host "Phien ban hien tai: $currentVersion" -ForegroundColor Yellow
 
-# 2. Lay phien ban moi nhat tu GitHub API
+# 2. Lay phien ban moi nhat tu GitHub
 $apiUrl = "https://api.github.com/repos/hoangxg4/vscode-portable/releases/latest"
-try {
-    $releaseInfo = Invoke-RestMethod -Uri $apiUrl
-    $latestTag = $releaseInfo.tag_name
-    $latestVersion = $latestTag -replace "^v", ""
-    
-    $arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM") { "arm64" } else { "x64" }
-    $fileName = "VSCode-Portable-windows-$arch-$latestVersion.zip"
-    $downloadUrl = "https://github.com/hoangxg4/vscode-portable/releases/download/$latestTag/$fileName"
+$releaseInfo = Invoke-RestMethod -Uri $apiUrl
+$latestTag = $releaseInfo.tag_name
+$latestVersion = $latestTag -replace "^v", ""
+$arch = if ($env:PROCESSOR_ARCHITECTURE -match "ARM") { "arm64" } else { "x64" }
+$fileName = "VSCode-Portable-windows-$arch-$latestVersion.zip"
+$downloadUrl = "https://github.com/hoangxg4/vscode-portable/releases/download/$latestTag/$fileName"
 
-    Write-Host "Phien ban moi nhat : $latestVersion" -ForegroundColor Green
+Write-Host "Phien ban moi nhat : $latestVersion" -ForegroundColor Green
 
-    if ($currentVersion -eq $latestVersion) {
-        Write-Host "=> Ban dang su dung ban moi nhat!" -ForegroundColor Cyan
-    }
-} catch {
-    Write-Host "Khong the ket noi den GitHub API!" -ForegroundColor Red
-    Pause; exit
+if ($currentVersion -eq $latestVersion) {
+    Write-Host "=> Ban dang su dung ban moi nhat!" -ForegroundColor Cyan
 }
 
 $choice = Read-Host "Ban co muon tiep tuc cap nhat / cai lai khong? (Y/N)"
 if ($choice -match "^[yY]$") {
-    $vscodeProcess = Get-Process -Name "Code" -ErrorAction SilentlyContinue
-    if ($vscodeProcess) {
-        Write-Host "LOI: Vui long DONG VS Code truoc khi cap nhat!" -ForegroundColor Red
+    if (Get-Process -Name "Code" -ErrorAction SilentlyContinue) {
+        Write-Host "LOI: Vui long DONG VS Code truoc khi tiep tuc!" -ForegroundColor Red
         Pause; exit
     }
 
@@ -81,15 +62,28 @@ if ($choice -match "^[yY]$") {
     if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract }
     Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
 
-    Write-Host "Dang sao luu thu muc data..." -ForegroundColor Cyan
+    # --- CHINH SUA QUAN TRONG O DAY ---
+    # Neu trong file zip co folder 'vscode', ta se copy noi dung ben TRONG do
+    $sourcePath = $tempExtract
+    if (Test-Path (Join-Path $tempExtract "vscode")) {
+        $sourcePath = Join-Path $tempExtract "vscode"
+    }
+
+    Write-Host "Dang sao luu du lieu 'data'..." -ForegroundColor Cyan
     $dataDir = Join-Path $currentDir "data"
     if (Test-Path $dataDir) { 
-        Copy-Item -Path $dataDir -Destination $tempExtract -Recurse -Force 
+        # Copy data vao folder tam truoc
+        if (!(Test-Path (Join-Path $sourcePath "data"))) {
+            Copy-Item -Path $dataDir -Destination $sourcePath -Recurse -Force 
+        }
     }
 
     Write-Host "Dang ghi de phien ban moi..." -ForegroundColor Cyan
+    # Xoa moi thu o thu muc hien tai (tru data va update script)
     Get-ChildItem -Path $currentDir | Where-Object { $_.Name -ne "data" -and $_.Name -notmatch "update.cmd" } | Remove-Item -Recurse -Force
-    Get-ChildItem -Path $tempExtract | Copy-Item -Destination $currentDir -Recurse -Force
+    
+    # Copy noi dung da "phang" tu sourcePath vao currentDir
+    Get-ChildItem -Path $sourcePath | Copy-Item -Destination $currentDir -Recurse -Force
 
     Remove-Item $tempZip
     Remove-Item -Recurse -Force $tempExtract
