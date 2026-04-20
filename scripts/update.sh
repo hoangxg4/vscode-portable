@@ -1,26 +1,29 @@
 #!/bin/bash
 
-# Nhận diện OS
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+CURRENT_DIR="$SCRIPT_DIR"
+
 OS_RAW=$(uname -s | tr '[:upper:]' '[:lower:]')
 ARCH_RAW=$(uname -m)
 
 if [ "$OS_RAW" == "darwin" ]; then
     OS_NAME="macos"
-    EXEC_PATHS=("./Visual Studio Code.app/Contents/Resources/app/bin/code" "../Visual Studio Code.app/Contents/Resources/app/bin/code")
     DATA_FOLDER="code-portable-data"
     EXT="zip"
 else
     OS_NAME="linux"
-    EXEC_PATHS=("./bin/code" "../bin/code")
     DATA_FOLDER="data"
     EXT="tar.gz"
 fi
 
-# 1. Lấy phiên bản
+# 1. Đọc version.txt cực kỳ đơn giản
 CURRENT_VERSION="Không xác định"
-for p in "${EXEC_PATHS[@]}"; do
-    if [ -x "$p" ]; then
-        CURRENT_VERSION=$("$p" --version | head -n 1)
+VERSION_PATHS=("$SCRIPT_DIR/version.txt" "$SCRIPT_DIR/../version.txt")
+
+for p in "${VERSION_PATHS[@]}"; do
+    if [ -f "$p" ]; then
+        CURRENT_VERSION=$(head -n 1 "$p" | tr -d '[:space:]')
+        CURRENT_DIR=$(dirname "$p") # Gốc cài đặt là nơi chứa version.txt
         break
     fi
 done
@@ -43,7 +46,6 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
         exit 1
     fi
 
-    CURRENT_DIR=$(pwd)
     TEMP_DIR=$(mktemp -d)
     
     echo "Đang tải và giải nén..."
@@ -56,9 +58,6 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
         tar -xzf "$TEMP_DIR/pkg.${EXT}" -C "$TEMP_DIR/extracted"
     fi
 
-    # --- SỬA LỖI FOLDER Ở ĐÂY ---
-    # Nếu là Linux, nội dung nằm trong folder 'vscode'
-    # Nếu là macOS, nội dung nằm ngay tại 'extracted' (vì file zip macOS chứa .app trực tiếp)
     SOURCE_PATH="$TEMP_DIR/extracted"
     if [ -d "$TEMP_DIR/extracted/vscode" ]; then
         SOURCE_PATH="$TEMP_DIR/extracted/vscode"
@@ -74,11 +73,10 @@ if [[ "$choice" =~ ^[Yy]$ ]]; then
         find "$CURRENT_DIR" -mindepth 1 -maxdepth 1 ! -name "$DATA_FOLDER" ! -name "update.sh" -exec rm -rf {} +
         cp -R "$SOURCE_PATH/"* "$CURRENT_DIR/"
     else
-        # Đối với macOS, chỉ cần ghi đè file .app
         rm -rf "$CURRENT_DIR/Visual Studio Code.app"
         cp -R "$SOURCE_PATH/Visual Studio Code.app" "$CURRENT_DIR/"
-        # Copy lại script update nếu nó nằm ngoài
         cp "$SOURCE_PATH/update.sh" "$CURRENT_DIR/" 2>/dev/null || true
+        cp "$SOURCE_PATH/version.txt" "$CURRENT_DIR/" 2>/dev/null || true
     fi
 
     rm -rf "$TEMP_DIR"
