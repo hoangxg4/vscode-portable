@@ -127,6 +127,9 @@ jobs:
       - name: Extract & Create Portable Structure
         run: |
           mkdir package
+
+          VERSION="${{ needs.check-version.outputs.version }}"
+          echo "$VERSION" > package/version.txt
           
           if [ "${{ matrix.ext }}" == "zip" ]; then
             unzip -q vscode.zip -d package/vscode
