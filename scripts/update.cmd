@@ -2,30 +2,30 @@
 @echo off
 setlocal
 echo Dang khoi dong trinh cap nhat...
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Invoke-Expression $([System.IO.File]::ReadAllText('%~f0'))" %*
+set "SCRIPT_DIR=%~dp0"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$env:SCRIPT_DIR='%SCRIPT_DIR%'; Invoke-Expression $([System.IO.File]::ReadAllText('%~f0'))" %*
 exit /b %errorlevel%
 #>
 
 $ErrorActionPreference = "Stop"
 Write-Host "--- TRINH CAP NHAT VS CODE PORTABLE ---" -ForegroundColor Cyan
 
-# 1. Tim file thuc thi de xac dinh thu muc goc
-$currentDir = Get-Location
-$exePaths = @(".\bin\code.cmd", "..\bin\code.cmd", ".\Code.exe", "..\Code.exe")
-$validExe = $null
+$scriptDir = $env:SCRIPT_DIR.TrimEnd('\')
+$currentDir = $scriptDir
 
-foreach ($p in $exePaths) {
-    if (Test-Path $p) { $validExe = $p; break }
-}
+# 1. Doc version.txt
+$versionPaths = @(
+    Join-Path $scriptDir "version.txt",
+    Join-Path $scriptDir "..\version.txt"
+)
 
 $currentVersion = "Khong xac dinh"
-if ($validExe) {
-    try {
-        $versionOutput = & $validExe --version
-        $currentVersion = $versionOutput[0].Trim()
-        $fullPath = Resolve-Path $validExe
-        $currentDir = if ($fullPath -match "bin\\code.cmd$") { Split-Path (Split-Path $fullPath) } else { Split-Path $fullPath }
-    } catch { }
+foreach ($p in $versionPaths) {
+    if (Test-Path $p) {
+        $currentVersion = (Get-Content -Path $p | Select-Object -First 1).Trim()
+        $currentDir = Split-Path $p # Dat thu muc goc theo vi tri cua version.txt
+        break
+    }
 }
 
 Write-Host "Phien ban hien tai: $currentVersion" -ForegroundColor Yellow
@@ -62,8 +62,6 @@ if ($choice -match "^[yY]$") {
     if (Test-Path $tempExtract) { Remove-Item -Recurse -Force $tempExtract }
     Expand-Archive -Path $tempZip -DestinationPath $tempExtract -Force
 
-    # --- CHINH SUA QUAN TRONG O DAY ---
-    # Neu trong file zip co folder 'vscode', ta se copy noi dung ben TRONG do
     $sourcePath = $tempExtract
     if (Test-Path (Join-Path $tempExtract "vscode")) {
         $sourcePath = Join-Path $tempExtract "vscode"
@@ -72,17 +70,13 @@ if ($choice -match "^[yY]$") {
     Write-Host "Dang sao luu du lieu 'data'..." -ForegroundColor Cyan
     $dataDir = Join-Path $currentDir "data"
     if (Test-Path $dataDir) { 
-        # Copy data vao folder tam truoc
         if (!(Test-Path (Join-Path $sourcePath "data"))) {
             Copy-Item -Path $dataDir -Destination $sourcePath -Recurse -Force 
         }
     }
 
     Write-Host "Dang ghi de phien ban moi..." -ForegroundColor Cyan
-    # Xoa moi thu o thu muc hien tai (tru data va update script)
     Get-ChildItem -Path $currentDir | Where-Object { $_.Name -ne "data" -and $_.Name -notmatch "update.cmd" } | Remove-Item -Recurse -Force
-    
-    # Copy noi dung da "phang" tu sourcePath vao currentDir
     Get-ChildItem -Path $sourcePath | Copy-Item -Destination $currentDir -Recurse -Force
 
     Remove-Item $tempZip
